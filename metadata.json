@@ -1,0 +1,6 @@
+{
+  "name": "Ice Esports",
+  "description": "Esports tournament platform with CS, BR, Night Mode, and Survival matches, leaderboards, and cloud sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

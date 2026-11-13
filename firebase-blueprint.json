@@ -1,0 +1,219 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Player profile and account state stored in Firestore.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "Firebase Auth UID." },
+        "iceId": { "type": "string", "description": "Public ICE Esports player tag (e.g. ICE12345)." },
+        "name": { "type": "string", "description": "Player display name." },
+        "email": { "type": "string", "description": "Verified Gmail address." },
+        "freeFireName": { "type": "string", "description": "In-game Free Fire IGN." },
+        "freeFireUid": { "type": "string", "description": "In-game Free Fire numeric UID." },
+        "avatarBase64": { "type": "string", "description": "Compressed profile picture thumbnail." },
+        "creditsBalance": { "type": "integer", "description": "Non-cash tournament credits balance." },
+        "isBlocked": { "type": "boolean", "description": "Whether account access is blocked by Admin." },
+        "blockReason": { "type": "string", "description": "Reason displayed on blocked screen." },
+        "matchesPlayed": { "type": "integer", "description": "Count of joined matches." },
+        "wins": { "type": "integer", "description": "Verified tournament wins." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp on creation." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp on update." }
+      },
+      "required": ["userId", "iceId", "name", "email", "creditsBalance", "isBlocked", "matchesPlayed", "wins", "createdAt", "updatedAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Verified administrator account record.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "email", "displayName", "createdAt"]
+    },
+    "Host": {
+      "title": "Host",
+      "description": "Admin-provisioned tournament host record.",
+      "type": "object",
+      "properties": {
+        "hostId": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "assignedMode": { "type": "string", "enum": ["ALL", "CS", "BR", "NIGHT_MODE", "SURVIVAL"] },
+        "isBlocked": { "type": "boolean" },
+        "blockReason": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["hostId", "userId", "name", "email", "assignedMode", "isBlocked", "createdBy", "createdAt", "updatedAt"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "Esports tournament match across CS, BR, Night Mode, or Survival.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "mode": { "type": "string", "enum": ["CS", "BR", "NIGHT_MODE", "SURVIVAL"] },
+        "status": { "type": "string", "enum": ["UPCOMING", "ONGOING", "COMPLETED"] },
+        "bannerKey": { "type": "string" },
+        "bannerBase64": { "type": "string" },
+        "entryLabel": { "type": "string" },
+        "prizeLabel": { "type": "string" },
+        "totalSlots": { "type": "integer" },
+        "joinedSlots": { "type": "integer" },
+        "scheduleText": { "type": "string" },
+        "rules": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdByRole": { "type": "string", "enum": ["ADMIN", "HOST"] },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "subtitle", "mode", "status", "bannerKey", "entryLabel", "prizeLabel", "totalSlots", "joinedSlots", "scheduleText", "rules", "createdBy", "createdByRole", "createdAt", "updatedAt"]
+    },
+    "RoomDetails": {
+      "title": "RoomDetails",
+      "description": "Private Free Fire custom room credentials accessible only to registered players, host, and admin.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string" },
+        "roomId": { "type": "string" },
+        "roomPassword": { "type": "string" },
+        "updatedBy": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tournamentId", "roomId", "roomPassword", "updatedBy", "updatedAt"]
+    },
+    "Registration": {
+      "title": "Registration",
+      "description": "Player slot registration for a tournament.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string" },
+        "tournamentTitle": { "type": "string" },
+        "mode": { "type": "string", "enum": ["CS", "BR", "NIGHT_MODE", "SURVIVAL"] },
+        "userId": { "type": "string" },
+        "hostId": { "type": "string" },
+        "playerName": { "type": "string" },
+        "freeFireName": { "type": "string" },
+        "freeFireUid": { "type": "string" },
+        "status": { "type": "string", "enum": ["CONFIRMED", "CANCELLED"] },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tournamentId", "tournamentTitle", "mode", "userId", "hostId", "playerName", "freeFireName", "freeFireUid", "status", "joinedAt"]
+    },
+    "Result": {
+      "title": "Result",
+      "description": "Admin-published winning record and leaderboard entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "playerName": { "type": "string" },
+        "freeFireName": { "type": "string" },
+        "tournamentId": { "type": "string" },
+        "tournamentTitle": { "type": "string" },
+        "mode": { "type": "string", "enum": ["ALL", "CS", "BR", "NIGHT_MODE", "SURVIVAL"] },
+        "wins": { "type": "integer" },
+        "kills": { "type": "integer" },
+        "points": { "type": "integer" },
+        "rank": { "type": "integer" },
+        "rewardCredits": { "type": "integer" },
+        "publishedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "playerName", "freeFireName", "tournamentId", "tournamentTitle", "mode", "wins", "kills", "points", "rank", "rewardCredits", "publishedBy", "createdAt", "updatedAt"]
+    },
+    "Notification": {
+      "title": "Notification",
+      "description": "In-app tournament and system notifications.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "type": { "type": "string", "enum": ["MATCH", "RESULT", "SYSTEM", "SECURITY"] },
+        "targetUserId": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "message", "type", "targetUserId", "createdBy", "createdAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Non-cash tournament credits ledger entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "type": { "type": "string", "enum": ["CREDIT_AWARD", "BONUS", "ADJUSTMENT"] },
+        "amountCredits": { "type": "integer" },
+        "note": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "type", "amountCredits", "note", "createdBy", "createdAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Immutable admin and host security/activity log.",
+      "type": "object",
+      "properties": {
+        "actorId": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "actorRole": { "type": "string", "enum": ["ADMIN", "HOST"] },
+        "action": { "type": "string" },
+        "targetId": { "type": "string" },
+        "details": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorId", "actorEmail", "actorRole", "action", "targetId", "details", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Player profiles and non-cash credit balances."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/Admin" },
+      "description": "Authorized admin accounts."
+    },
+    "/hosts/{hostId}": {
+      "schema": { "$ref": "#/entities/Host" },
+      "description": "Admin-created tournament host accounts."
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": { "$ref": "#/entities/Tournament" },
+      "description": "Tournament matches across CS, BR, Night Mode, and Survival."
+    },
+    "/tournaments/{tournamentId}/room/{docId}": {
+      "schema": { "$ref": "#/entities/RoomDetails" },
+      "description": "Protected custom room ID and password subcollection."
+    },
+    "/registrations/{registrationId}": {
+      "schema": { "$ref": "#/entities/Registration" },
+      "description": "Player match registrations keyed by tournamentId_userId."
+    },
+    "/results/{resultId}": {
+      "schema": { "$ref": "#/entities/Result" },
+      "description": "Admin-published leaderboard and winning records."
+    },
+    "/notifications/{notificationId}": {
+      "schema": { "$ref": "#/entities/Notification" },
+      "description": "Broadcast and user-targeted notifications."
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Non-cash tournament credit transaction history."
+    },
+    "/auditLogs/{logId}": {
+      "schema": { "$ref": "#/entities/AuditLog" },
+      "description": "Immutable activity and audit log for admins and hosts."
+    }
+  }
+}

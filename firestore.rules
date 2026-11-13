@@ -1,0 +1,367 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Primitive Helpers ---
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.@]+$');
+    }
+
+    function isBootstrappedAdmin() {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email == 'gavjbjbuu@gmail.com';
+    }
+
+    function isAdmin() {
+      return isBootstrappedAdmin() ||
+             (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
+    }
+
+    function isActiveHost() {
+      return isSignedIn() &&
+             exists(/databases/$(database)/documents/hosts/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/hosts/$(request.auth.uid)).data.isBlocked == false;
+    }
+
+    function isNotBlockedUser() {
+      return isSignedIn() &&
+             (!exists(/databases/$(database)/documents/users/$(request.auth.uid)) ||
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBlocked == false);
+    }
+
+    // --- Validation Helpers ---
+    function isValidUser(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.iceId is string && data.iceId.size() >= 3 && data.iceId.size() <= 32 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             (!('freeFireName' in data) || data.freeFireName == null || (data.freeFireName is string && data.freeFireName.size() <= 60)) &&
+             (!('freeFireUid' in data) || data.freeFireUid == null || (data.freeFireUid is string && data.freeFireUid.size() <= 32)) &&
+             (!('avatarBase64' in data) || data.avatarBase64 == null || (data.avatarBase64 is string && data.avatarBase64.size() <= 300000)) &&
+             data.creditsBalance is int && data.creditsBalance >= 0 && data.creditsBalance <= 10000000 &&
+             data.isBlocked is bool &&
+             (!('blockReason' in data) || data.blockReason == null || (data.blockReason is string && data.blockReason.size() <= 200)) &&
+             data.matchesPlayed is int && data.matchesPlayed >= 0 &&
+             data.wins is int && data.wins >= 0 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidAdmin(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidHost(data) {
+      return data.hostId is string && data.hostId.size() >= 1 && data.hostId.size() <= 128 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.name is string && data.name.size() >= 1 && data.name.size() <= 60 &&
+             data.email is string && data.email.size() >= 3 && data.email.size() <= 120 &&
+             data.assignedMode in ['ALL', 'CS', 'BR', 'NIGHT_MODE', 'SURVIVAL'] &&
+             data.isBlocked is bool &&
+             (!('blockReason' in data) || data.blockReason == null || (data.blockReason is string && data.blockReason.size() <= 200)) &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidTournament(data) {
+      return data.title is string && data.title.size() >= 3 && data.title.size() <= 80 &&
+             data.subtitle is string && data.subtitle.size() >= 1 && data.subtitle.size() <= 80 &&
+             data.mode in ['CS', 'BR', 'NIGHT_MODE', 'SURVIVAL'] &&
+             data.status in ['UPCOMING', 'ONGOING', 'COMPLETED'] &&
+             data.bannerKey is string && data.bannerKey.size() >= 1 && data.bannerKey.size() <= 64 &&
+             (!('bannerBase64' in data) || data.bannerBase64 == null || (data.bannerBase64 is string && data.bannerBase64.size() <= 350000)) &&
+             data.entryLabel is string && data.entryLabel.size() >= 1 && data.entryLabel.size() <= 60 &&
+             data.prizeLabel is string && data.prizeLabel.size() >= 1 && data.prizeLabel.size() <= 60 &&
+             data.totalSlots is int && data.totalSlots >= 2 && data.totalSlots <= 200 &&
+             data.joinedSlots is int && data.joinedSlots >= 0 && data.joinedSlots <= data.totalSlots &&
+             data.scheduleText is string && data.scheduleText.size() >= 3 && data.scheduleText.size() <= 80 &&
+             data.rules is string && data.rules.size() <= 1500 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdByRole in ['ADMIN', 'HOST'] &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRoomDetails(data) {
+      return data.tournamentId is string && data.tournamentId.size() >= 1 && data.tournamentId.size() <= 128 &&
+             data.roomId is string && data.roomId.size() <= 40 &&
+             data.roomPassword is string && data.roomPassword.size() <= 40 &&
+             data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidRegistration(data) {
+      return data.tournamentId is string && data.tournamentId.size() >= 1 && data.tournamentId.size() <= 128 &&
+             data.tournamentTitle is string && data.tournamentTitle.size() >= 1 && data.tournamentTitle.size() <= 80 &&
+             data.mode in ['CS', 'BR', 'NIGHT_MODE', 'SURVIVAL'] &&
+             data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.hostId is string && data.hostId.size() >= 1 && data.hostId.size() <= 128 &&
+             data.playerName is string && data.playerName.size() >= 1 && data.playerName.size() <= 60 &&
+             data.freeFireName is string && data.freeFireName.size() <= 60 &&
+             data.freeFireUid is string && data.freeFireUid.size() <= 32 &&
+             data.status in ['CONFIRMED', 'CANCELLED'] &&
+             data.joinedAt is timestamp && data.joinedAt <= request.time;
+    }
+
+    function isValidResult(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.playerName is string && data.playerName.size() >= 1 && data.playerName.size() <= 60 &&
+             data.freeFireName is string && data.freeFireName.size() <= 60 &&
+             data.tournamentId is string && data.tournamentId.size() >= 1 && data.tournamentId.size() <= 128 &&
+             data.tournamentTitle is string && data.tournamentTitle.size() >= 1 && data.tournamentTitle.size() <= 80 &&
+             data.mode in ['ALL', 'CS', 'BR', 'NIGHT_MODE', 'SURVIVAL'] &&
+             data.wins is int && data.wins >= 0 && data.wins <= 100000 &&
+             data.kills is int && data.kills >= 0 && data.kills <= 100000 &&
+             data.points is int && data.points >= 0 && data.points <= 1000000 &&
+             data.rank is int && data.rank >= 1 && data.rank <= 10000 &&
+             data.rewardCredits is int && data.rewardCredits >= 0 && data.rewardCredits <= 1000000 &&
+             data.publishedBy is string && data.publishedBy.size() >= 1 && data.publishedBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidNotification(data) {
+      return data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.message is string && data.message.size() >= 1 && data.message.size() <= 500 &&
+             data.type in ['MATCH', 'RESULT', 'SYSTEM', 'SECURITY'] &&
+             data.targetUserId is string && data.targetUserId.size() >= 1 && data.targetUserId.size() <= 128 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidTransaction(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.title is string && data.title.size() >= 1 && data.title.size() <= 80 &&
+             data.type in ['CREDIT_AWARD', 'BONUS', 'ADJUSTMENT'] &&
+             data.amountCredits is int && data.amountCredits >= -1000000 && data.amountCredits <= 1000000 &&
+             data.note is string && data.note.size() <= 200 &&
+             data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    function isValidAuditLog(data) {
+      return data.actorId is string && data.actorId.size() >= 1 && data.actorId.size() <= 128 &&
+             data.actorEmail is string && data.actorEmail.size() >= 3 && data.actorEmail.size() <= 120 &&
+             data.actorRole in ['ADMIN', 'HOST'] &&
+             data.action is string && data.action.size() >= 2 && data.action.size() <= 60 &&
+             data.targetId is string && data.targetId.size() <= 128 &&
+             data.details is string && data.details.size() <= 300 &&
+             data.createdAt is timestamp && data.createdAt <= request.time;
+    }
+
+    // --- Collection Rules ---
+
+    // 1. Users (Player Profiles - PII Protected)
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+
+      allow create: if isValidId(userId) &&
+                       isSignedIn() &&
+                       request.auth.uid == userId &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().keys().hasAll(['userId', 'iceId', 'name', 'email', 'creditsBalance', 'isBlocked', 'matchesPlayed', 'wins', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['userId', 'iceId', 'name', 'email', 'freeFireName', 'freeFireUid', 'avatarBase64', 'creditsBalance', 'isBlocked', 'blockReason', 'matchesPlayed', 'wins', 'createdAt', 'updatedAt']) &&
+                       incoming().isBlocked == false &&
+                       incoming().creditsBalance == 0 &&
+                       incoming().matchesPlayed == 0 &&
+                       incoming().wins == 0 &&
+                       isValidUser(incoming());
+
+      allow update: if isValidId(userId) &&
+                       isSignedIn() &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidUser(incoming()) && (
+                         isAdmin() || (
+                           request.auth.uid == userId &&
+                           existing().isBlocked == false &&
+                           incoming().isBlocked == existing().isBlocked &&
+                           incoming().creditsBalance == existing().creditsBalance &&
+                           incoming().matchesPlayed == existing().matchesPlayed &&
+                           incoming().wins == existing().wins &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['name', 'freeFireName', 'freeFireUid', 'avatarBase64', 'updatedAt'])
+                         )
+                       );
+
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // 2. Admins (Role Lookup Only)
+    match /admins/{adminId} {
+      allow get: if isValidId(adminId) && isSignedIn() && (request.auth.uid == adminId || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isValidId(adminId) && isAdmin() && isValidAdmin(incoming());
+      allow delete: if isValidId(adminId) && isAdmin();
+    }
+
+    // 3. Hosts (Admin-Provisioned Only)
+    match /hosts/{hostId} {
+      allow get: if isValidId(hostId) && isSignedIn() && (
+        request.auth.uid == hostId ||
+        isAdmin() ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+      allow list: if isSignedIn() && (
+        isAdmin() ||
+        resource.data.userId == request.auth.uid ||
+        (request.auth.token.email_verified == true && resource.data.email == request.auth.token.email)
+      );
+
+      allow create: if isValidId(hostId) && isValidHost(incoming()) && (
+        (isAdmin() && incoming().createdBy == request.auth.uid && incoming().keys().hasAll(['hostId', 'userId', 'name', 'email', 'assignedMode', 'isBlocked', 'createdBy', 'createdAt', 'updatedAt'])) ||
+        (isSignedIn() && hostId == request.auth.uid && incoming().hostId == request.auth.uid && incoming().userId == request.auth.uid && request.auth.token.email_verified == true && incoming().email == request.auth.token.email && incoming().isBlocked == false && exists(/databases/$(database)/documents/hosts/$( 'invite_' + request.auth.token.email )))
+      );
+
+      allow update: if isValidId(hostId) && isAdmin() && isValidHost(incoming()) &&
+                       incoming().createdBy == existing().createdBy &&
+                       incoming().createdAt == existing().createdAt;
+
+      allow delete: if isValidId(hostId) && isAdmin();
+    }
+
+    // 4. Tournaments
+    match /tournaments/{tournamentId} {
+      allow get: if isValidId(tournamentId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.status in ['UPCOMING', 'ONGOING', 'COMPLETED'];
+
+      allow create: if isValidId(tournamentId) &&
+                       (isAdmin() || isActiveHost()) &&
+                       incoming().createdBy == request.auth.uid &&
+                       ((isAdmin() && incoming().createdByRole == 'ADMIN') || (!isAdmin() && isActiveHost() && incoming().createdByRole == 'HOST')) &&
+                       incoming().joinedSlots == 0 &&
+                       incoming().keys().hasAll(['title', 'subtitle', 'mode', 'status', 'bannerKey', 'entryLabel', 'prizeLabel', 'totalSlots', 'joinedSlots', 'scheduleText', 'rules', 'createdBy', 'createdByRole', 'createdAt', 'updatedAt']) &&
+                       isValidTournament(incoming());
+
+      allow update: if isValidId(tournamentId) &&
+                       isSignedIn() &&
+                       incoming().createdBy == existing().createdBy &&
+                       incoming().createdByRole == existing().createdByRole &&
+                       incoming().createdAt == existing().createdAt &&
+                       isValidTournament(incoming()) && (
+                         isAdmin() ||
+                         (isActiveHost() && existing().createdBy == request.auth.uid) ||
+                         (isNotBlockedUser() &&
+                          existing().status == 'UPCOMING' &&
+                          incoming().joinedSlots == existing().joinedSlots + 1 &&
+                          incoming().joinedSlots <= existing().totalSlots &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['joinedSlots', 'updatedAt']) &&
+                          existsAfter(/databases/$(database)/documents/registrations/$(tournamentId + '_' + request.auth.uid)))
+                       );
+
+      allow delete: if isValidId(tournamentId) && (isAdmin() || (isActiveHost() && existing().createdBy == request.auth.uid));
+
+      // Protected Room Credentials Subcollection
+      match /room/{docId} {
+        allow get: if isValidId(tournamentId) && isValidId(docId) && isSignedIn() && (
+          isAdmin() ||
+          isActiveHost() ||
+          exists(/databases/$(database)/documents/registrations/$(tournamentId + '_' + request.auth.uid))
+        );
+        allow list: if false;
+        allow create, update: if isValidId(tournamentId) &&
+                                 isValidId(docId) &&
+                                 docId == 'details' &&
+                                 isValidRoomDetails(incoming()) &&
+                                 incoming().tournamentId == tournamentId &&
+                                 incoming().updatedBy == request.auth.uid &&
+                                 (isAdmin() || (isActiveHost() && get(/databases/$(database)/documents/tournaments/$(tournamentId)).data.createdBy == request.auth.uid));
+        allow delete: if isValidId(tournamentId) && isValidId(docId) && isAdmin();
+      }
+    }
+
+    // 5. Registrations
+    match /registrations/{registrationId} {
+      allow get: if isValidId(registrationId) && isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.hostId == request.auth.uid ||
+        isAdmin() ||
+        isActiveHost()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.userId == request.auth.uid ||
+        resource.data.hostId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isValidId(registrationId) &&
+                       isNotBlockedUser() &&
+                       registrationId == (incoming().tournamentId + '_' + request.auth.uid) &&
+                       incoming().userId == request.auth.uid &&
+                       incoming().status == 'CONFIRMED' &&
+                       incoming().keys().hasAll(['tournamentId', 'tournamentTitle', 'mode', 'userId', 'hostId', 'playerName', 'freeFireName', 'freeFireUid', 'status', 'joinedAt']) &&
+                       isValidRegistration(incoming()) &&
+                       exists(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)) &&
+                       get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.status == 'UPCOMING';
+
+      allow update: if isValidId(registrationId) && isAdmin() && isValidRegistration(incoming());
+      allow delete: if isValidId(registrationId) && isAdmin();
+    }
+
+    // 6. Results & Leaderboard (Admin-Controlled Only)
+    match /results/{resultId} {
+      allow get: if isValidId(resultId) && isSignedIn();
+      allow list: if isSignedIn() && resource.data.mode in ['ALL', 'CS', 'BR', 'NIGHT_MODE', 'SURVIVAL'];
+      allow create, update: if isValidId(resultId) && isAdmin() && incoming().publishedBy == request.auth.uid && isValidResult(incoming());
+      allow delete: if isValidId(resultId) && isAdmin();
+    }
+
+    // 7. Notifications
+    match /notifications/{notificationId} {
+      allow get: if isValidId(notificationId) && isSignedIn() && (
+        resource.data.targetUserId == 'ALL' ||
+        resource.data.targetUserId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isSignedIn() && (
+        resource.data.targetUserId == 'ALL' ||
+        resource.data.targetUserId == request.auth.uid ||
+        resource.data.createdBy == request.auth.uid ||
+        isAdmin()
+      );
+      allow create, update: if isValidId(notificationId) && isAdmin() && incoming().createdBy == request.auth.uid && isValidNotification(incoming());
+      allow delete: if isValidId(notificationId) && isAdmin();
+    }
+
+    // 8. Transactions (Non-Cash Tournament Credits Ledger)
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isValidId(transactionId) && isAdmin() && incoming().createdBy == request.auth.uid && isValidTransaction(incoming());
+      allow update, delete: if false;
+    }
+
+    // 9. Audit Logs (Immutable Admin & Host Activity Trail)
+    match /auditLogs/{logId} {
+      allow get, list: if isAdmin();
+      allow create: if isValidId(logId) &&
+                       (isAdmin() || isActiveHost()) &&
+                       incoming().actorId == request.auth.uid &&
+                       ((isAdmin() && incoming().actorRole == 'ADMIN') || (!isAdmin() && isActiveHost() && incoming().actorRole == 'HOST')) &&
+                       isValidAuditLog(incoming());
+      allow update, delete: if false;
+    }
+  }
+}
